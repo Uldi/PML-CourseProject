@@ -1,0 +1,106 @@
+---
+title: "PML Course Project"
+author: "David"
+date: "24 3 2019"
+output: html_document
+---
+
+### Data Source
+The data for this project come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+###Load the needed libraries
+```{r}
+library(caret)
+library(rattle)
+```
+
+### Load Data, Data analysis
+```{r}
+training <- read.csv("data/pml-training.csv")
+testing <- read.csv("data/pml-testing.csv")
+str(training)
+dim(training)
+dim(testing)
+unique(training$classe)
+```
+
+### Assignment
+The goal of your project is to predict the manner in which they did the exercise. This is the *"classe"* variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used **cross validation**, what you think the **expected out of sample error** is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+
+### Data Cleaning
+Remove variables with NA's, remove first variables that deal with the user and timestamps
+```{r}
+training <- training[,-c(1:7)]
+testing <- testing[,-c(1:7)]
+nonNACols <- which(colSums(is.na(training))==0)
+training <- training[,nonNACols]
+testing <- testing[,nonNACols]
+dim(training)
+dim(testing)
+```
+
+Remove the Near Zero Value columns
+```{r}
+nzv <- nearZeroVar(training)
+training <- training[,-nzv]
+dim(training)
+```
+
+Create the training and validation data sets
+```{r}
+inTrain <- createDataPartition(training$classe, p=0.7, list=FALSE)
+trainingDS <- training[inTrain,]
+validationDS <- training[-inTrain,]
+dim(trainingDS)
+dim(validationDS)
+```
+
+###Training
+I decided to start with a random forrest which might already give a good accuracy. Then I will also train a model with a classification tree
+
+In both models we use the **cross-validation technique**. We apply a train control object defining that we use cross validation with 5 folds. Cross validation help limiting overfitting.
+
+
+####Train model with method "random forest
+```{r}
+set.seed(2222)
+controlRF <- trainControl(method="cv", number=5)
+modFitRF <- train(classe ~ ., method="rf", data=trainingDS, verbose=FALSE, trControl=controlRF)
+plot(modFitRF$finalModel, main="number of trees vs error")
+modFitRF$finalModel
+```
+Now predict using the validation data set
+```{r}
+predRF <- predict(modFitRF, newdata=validationDS)
+cmRF <- confusionMatrix(predRF, validationDS$classe)
+cmRF$table
+cmRF$overall["Accuracy"]
+```
+With *99.2%* we already have a very good accuracy.
+
+####Train model with method "classificaton tree"
+```{r}
+set.seed(3333)
+controlRPART <- trainControl(method="cv", number=5)
+modFitRPART <- train(classe ~ ., method="rpart", data=trainingDS, trControl=controlRPART)
+fancyRpartPlot(modFitRPART$finalModel)
+modFitRPART$finalModel
+```
+Now predict using the validation data set
+```{r}
+predRPART <- predict(modFitRPART, newdata=validationDS)
+cmRPART <- confusionMatrix(predRPART, validationDS$classe)
+cmRPART$table
+cmRPART$overall["Accuracy"]
+```
+With only **49.6% the accuracy** the classification tree is pretty bad. Increasing the number of folds makes no change.
+
+So let's go with the random forrests with an **accuracy of 99.2%** which implies an **out-of-sample-error of 0.8%**
+
+###Testing the model with the test data
+No lets predict the classe for the 20 testing data sets provided
+```{r}
+predTesting <- predict(modFitRF, newdata=testing)
+predTesting
+```
